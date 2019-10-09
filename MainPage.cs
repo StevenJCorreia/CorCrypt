@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
@@ -8,13 +9,12 @@ namespace CorCrypt
 {
     public partial class CorCrypt : Form
     {
-        private string FILE_PATH_VALUE_DEFAULT = "Enter File Path";
         private string PASSWORD_VALUE_DEFAULT = "Enter Password";
 
         public CorCrypt()
         {
             InitializeComponent();
-
+            
             filePathErrorLabel.Visible = false;
             passwordErrorLabel.Visible = false;
         }
@@ -27,19 +27,17 @@ namespace CorCrypt
 
         private void ResetForm()
         {
-            filePathValue.Text = FILE_PATH_VALUE_DEFAULT;
-            GreyFilePathLabel();
             passwordValue.Text = PASSWORD_VALUE_DEFAULT;
             GreyPasswordLabel();
 
             filePathErrorLabel.Visible = false;
             passwordErrorLabel.Visible = false;
-        }
 
-        private void DarkenFilePathLabel()
-        {
-            filePathValue.Text = "";
-            filePathValue.ForeColor = Color.Black;
+            filePathsListBox.Items.Clear();
+
+            toolStripProgressBar.Value = 0;
+
+            toolStripStatusLabel.Text = "0 files";
         }
 
         private void DarkenPasswordLabel()
@@ -57,14 +55,35 @@ namespace CorCrypt
             }
             else
             {
-                try
+                int count = 0;
+                int index = 0;
+
+                foreach (string file in filePathsListBox.Items)
                 {
-                    _AES256.DecryptFile(filePathValue.Text, passwordValue.Text);
+                    index = filePathsListBox.FindStringExact(file);
+
+                    try
+                    {
+                        _AES256.DecryptFile(file, passwordValue.Text);
+                    }
+                    catch (Exception exception)
+                    {
+                        filePathsListBox.SetSelected(index, true);
+                        MessageBox.Show(exception.Message + $"\nCannot cipher file '{ file }' @ index { index }", "Cannot Cipher File");
+                        ResetForm();
+                        return;
+                    }
+
+                    toolStripProgressBar.Value = (++count / filePathsListBox.Items.Count) * 100;
                 }
-                catch (Exception exception)
+
+                if (count == 0)
                 {
-                    MessageBox.Show(exception.Message, "Cannot Cipher File");
-                    return;
+                    MessageBox.Show($"Successfully decrypted file '{ filePathsListBox.Items[index].ToString() }'");
+                }
+                else
+                {
+                    MessageBox.Show($"Successfully decrypted files:\n" + GetAllFileFromListBox());
                 }
 
                 ResetForm();
@@ -79,14 +98,35 @@ namespace CorCrypt
             }
             else
             {
-                try
+                int count = 0;
+                int index = 0;
+
+                foreach (string file in filePathsListBox.Items)
                 {
-                    _AES256.EncryptFile(filePathValue.Text, passwordValue.Text);
+                    index = filePathsListBox.FindStringExact(file);
+
+                    try
+                    {
+                        _AES256.EncryptFile(file, passwordValue.Text);
+                    }
+                    catch (Exception exception)
+                    {
+                        filePathsListBox.SetSelected(index, true);
+                        MessageBox.Show(exception.Message + $"\nCannot cipher file '{ file }' @ index { index }", "Cannot Cipher File");
+                        ResetForm();
+                        return;
+                    }
+
+                    toolStripProgressBar.Value = (++count / filePathsListBox.Items.Count) * 100;
                 }
-                catch (Exception exception)
+
+                if (count == 0)
                 {
-                    MessageBox.Show(exception.Message, "Cannot Cipher File");
-                    return;
+                    MessageBox.Show($"Successfully encrypted file '{ filePathsListBox.Items[index].ToString() }'");
+                }
+                else
+                {
+                    MessageBox.Show($"Successfully encrypted files:\n" + GetAllFileFromListBox());
                 }
 
                 ResetForm();
@@ -98,26 +138,16 @@ namespace CorCrypt
             this.Close();
         }
 
-        private void FilePathValue_Enter(object sender, EventArgs e)
+        private string GetAllFileFromListBox()
         {
-            if (filePathValue.Text == FILE_PATH_VALUE_DEFAULT)
-            {
-                DarkenFilePathLabel();
-            }
-        }
+            string files = "";
 
-        private void FilePathValue_Leave(object sender, EventArgs e)
-        {
-            if (filePathValue.Text == "")
+            foreach (string file in filePathsListBox.Items)
             {
-                GreyFilePathLabel();
+                files += $"{ file }\n";
             }
-        }
 
-        private void GreyFilePathLabel()
-        {
-            filePathValue.Text = FILE_PATH_VALUE_DEFAULT;
-            filePathValue.ForeColor = Color.Silver;
+            return files;
         }
 
         private void GreyPasswordLabel()
@@ -148,42 +178,93 @@ namespace CorCrypt
             }
         }
 
-        private string SelectFile()
+        private void PasswordValue_TextChanged(object sender, EventArgs e)
+        {
+            if (passwordValue.Text == PASSWORD_VALUE_DEFAULT || passwordValue.Text.Length == 0)
+            {
+                return;
+            }
+
+            passwordErrorLabel.Visible = false;
+
+            // Add more exception handling for weak passwords
+            if (passwordValue.Text.Length < 8)
+            {
+                string error = "Weak password detected.";
+
+                SetErrorLabel(passwordErrorLabel, error);
+
+                return;
+            }
+        }
+
+        private void RefreshStatusLabel(int count)
+        {
+            if (count == 1)
+            {
+                toolStripStatusLabel.Text = count + " file";
+            }
+            else
+            {
+                toolStripStatusLabel.Text = count + " files";
+            }
+        }
+
+        private void RemoveFileButton_Click(object sender, EventArgs e)
+        {
+            filePathsListBox.Items.RemoveAt(filePathsListBox.SelectedIndex);
+            RefreshStatusLabel(filePathsListBox.Items.Count);
+        }
+
+        private string[] SelectFile()
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
-
             openFileDialog.Title = "Open File...";
             openFileDialog.Filter = "All files (*.*)|*.*|CSV files (*.csv)|*.csv|Text files (*.txt)|*txt";
             //saveFileDialog.InitialDirectory = System.IO.Directory.GetCurrentDirectory();
             openFileDialog.RestoreDirectory = true;
+            openFileDialog.Multiselect = true;
             openFileDialog.CheckFileExists = true;
 
             if (openFileDialog.ShowDialog() == DialogResult.Cancel)
             {
-                return "";
+                return new string[0];
             }
 
-            return openFileDialog.FileName; // TODO - Make this return string[] for multiple file functionality
+            return openFileDialog.FileNames;
         }
 
         private void SelectFile_Click(object sender, EventArgs e)
         {
-            string filePath = SelectFile();
+            string[] files = SelectFile();
 
-            if (!(filePath.Length == 0))
+            if (!(files.Length == 0))
             {
-                filePathValue.Text = filePath;
-                filePathValue.ForeColor = Color.Black;
+
+                foreach (string file in files)
+                {
+                    if (!filePathsListBox.Items.Contains(file))
+                    {
+                        filePathsListBox.Items.Add(file);
+                        RefreshStatusLabel(filePathsListBox.Items.Count);
+                    }
+                }
             }
+        }
+
+        private void SetErrorLabel(Label label, string error)
+        {
+            label.Text = error;
+            label.Visible = true;
         }
 
         private Boolean ValidateForm()
         {
             Boolean formValid = true;
 
-            if (filePathValue.Text == FILE_PATH_VALUE_DEFAULT)
+            if (filePathsListBox.Items.Count == 0)
             {
-                string error = "Please enter a file.";
+                string error = "Please choose at least one file.";
 
                 SetErrorLabel(filePathErrorLabel, error);
 
@@ -200,33 +281,6 @@ namespace CorCrypt
             }
 
             return formValid;
-        }
-
-        private void SetErrorLabel(Label label, string error)
-        {
-            label.Text = error;
-            label.Visible = true;
-        }
-
-        private void PasswordValue_TextChanged(object sender, EventArgs e)
-        {
-            if (passwordValue.Text == PASSWORD_VALUE_DEFAULT || passwordValue.Text.Length == 0)
-            {
-                return;
-            }
-
-            passwordErrorLabel.Visible = false;
-
-            // Add more exception handling for weak passwords
-            if (passwordValue.Text.Length < 8)
-            {
-                string error = "Weak password detected.";
-
-                // TODO - Make look more like a warning than an error
-                SetErrorLabel(passwordErrorLabel, error);
-
-                return;
-            }
         }
     }
 }
