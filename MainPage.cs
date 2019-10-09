@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
+using CyberCrypt;
 
 namespace CorCrypt
 {
@@ -56,9 +57,15 @@ namespace CorCrypt
             }
             else
             {
-                // TODO - Decrypt
-
-                // TODO - Messagebox result
+                try
+                {
+                    _AES256.DecryptFile(filePathValue.Text, passwordValue.Text);
+                }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(exception.Message, "Cannot Cipher File");
+                    return;
+                }
 
                 ResetForm();
             }
@@ -72,9 +79,15 @@ namespace CorCrypt
             }
             else
             {
-                // TODO - Encrypt
-
-                // TODO - Messagebox result
+                try
+                {
+                    _AES256.EncryptFile(filePathValue.Text, passwordValue.Text);
+                }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(exception.Message, "Cannot Cipher File");
+                    return;
+                }
 
                 ResetForm();
             }
