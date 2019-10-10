@@ -3,12 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
+using CorCrypt.Models;
 using CyberCrypt;
+
+//TODO - Make the "weak password" label a linklabel that either brings the user to an online password generator or a new form where i'll generate it for them...
 
 namespace CorCrypt
 {
     public partial class CorCrypt : Form
     {
+        private List<File> fileList = new List<File>();
         private string PASSWORD_VALUE_DEFAULT = "Enter Password";
 
         public CorCrypt()
@@ -17,6 +21,8 @@ namespace CorCrypt
             
             filePathErrorLabel.Visible = false;
             passwordErrorLabel.Visible = false;
+
+            RefreshListBox();
         }
 
         private void AboutToolStripMenuItem_Click(object sender, EventArgs e)
@@ -33,7 +39,9 @@ namespace CorCrypt
             filePathErrorLabel.Visible = false;
             passwordErrorLabel.Visible = false;
 
-            filePathsListBox.Items.Clear();
+            fileList.Clear();
+
+            RefreshListBox();
 
             toolStripProgressBar.Value = 0;
 
@@ -58,32 +66,32 @@ namespace CorCrypt
                 int count = 0;
                 int index = 0;
 
-                foreach (string file in filePathsListBox.Items)
+                foreach (File file in fileList)
                 {
-                    index = filePathsListBox.FindStringExact(file);
+                    index = filePathsListBox.FindStringExact(file.fullFilePath);
 
                     try
                     {
-                        _AES256.DecryptFile(file, passwordValue.Text);
+                        _AES256.DecryptFile(file.fullFilePath, passwordValue.Text);
                     }
                     catch (Exception exception)
                     {
                         filePathsListBox.SetSelected(index, true);
-                        MessageBox.Show(exception.Message + $"\nCannot cipher file '{ file }' @ index { index }", "Cannot Cipher File");
+                        MessageBox.Show(exception.Message + $"\nCannot cipher file '{ file.fullFilePath }' @ index { index }", "Cannot Cipher File");
                         ResetForm();
                         return;
                     }
 
-                    toolStripProgressBar.Value = (++count / filePathsListBox.Items.Count) * 100;
+                    toolStripProgressBar.Value = (++count / fileList.Count) * 100;
                 }
 
                 if (count == 0)
                 {
-                    MessageBox.Show($"Successfully decrypted file '{ filePathsListBox.Items[index].ToString() }'");
+                    MessageBox.Show($"Successfully decrypted file '{ fileList[index].fullFilePath }'");
                 }
                 else
                 {
-                    MessageBox.Show($"Successfully decrypted files:\n" + GetAllFileFromListBox());
+                    MessageBox.Show($"Successfully decrypted files:\n" + GetAllFilesFromListBox());
                 }
 
                 ResetForm();
@@ -101,32 +109,32 @@ namespace CorCrypt
                 int count = 0;
                 int index = 0;
 
-                foreach (string file in filePathsListBox.Items)
+                foreach (File file in fileList)
                 {
-                    index = filePathsListBox.FindStringExact(file);
+                    index = filePathsListBox.FindStringExact(file.fullFilePath);
 
                     try
                     {
-                        _AES256.EncryptFile(file, passwordValue.Text);
+                        _AES256.EncryptFile(file.fullFilePath, passwordValue.Text);
                     }
                     catch (Exception exception)
                     {
                         filePathsListBox.SetSelected(index, true);
-                        MessageBox.Show(exception.Message + $"\nCannot cipher file '{ file }' @ index { index }", "Cannot Cipher File");
+                        MessageBox.Show(exception.Message + $"\nCannot cipher file '{ file.fullFilePath }' @ index { index }", "Cannot Cipher File");
                         ResetForm();
                         return;
                     }
 
-                    toolStripProgressBar.Value = (++count / filePathsListBox.Items.Count) * 100;
+                    toolStripProgressBar.Value = (++count / fileList.Count) * 100;
                 }
 
                 if (count == 0)
                 {
-                    MessageBox.Show($"Successfully encrypted file '{ filePathsListBox.Items[index].ToString() }'");
+                    MessageBox.Show($"Successfully encrypted file '{ fileList[index].fullFilePath }'");
                 }
                 else
                 {
-                    MessageBox.Show($"Successfully encrypted files:\n" + GetAllFileFromListBox());
+                    MessageBox.Show($"Successfully encrypted files:\n" + GetAllFilesFromListBox());
                 }
 
                 ResetForm();
@@ -138,13 +146,13 @@ namespace CorCrypt
             this.Close();
         }
 
-        private string GetAllFileFromListBox()
+        private string GetAllFilesFromListBox()
         {
             string files = "";
 
-            foreach (string file in filePathsListBox.Items)
+            foreach (File file in fileList)
             {
-                files += $"{ file }\n";
+                files += $"{ file.fullFilePath }\n";
             }
 
             return files;
@@ -198,6 +206,13 @@ namespace CorCrypt
             }
         }
 
+        private void RefreshListBox()
+        {
+            filePathsListBox.DataSource = null;
+            filePathsListBox.DataSource = fileList;
+            filePathsListBox.DisplayMember = "fileName";
+        }
+
         private void RefreshStatusLabel(int count)
         {
             if (count == 1)
@@ -212,8 +227,11 @@ namespace CorCrypt
 
         private void RemoveFileButton_Click(object sender, EventArgs e)
         {
-            filePathsListBox.Items.RemoveAt(filePathsListBox.SelectedIndex);
-            RefreshStatusLabel(filePathsListBox.Items.Count);
+            fileList.RemoveAt(filePathsListBox.SelectedIndex);
+
+            RefreshStatusLabel(fileList.Count);
+
+            RefreshListBox();
         }
 
         private string[] SelectFile()
@@ -236,17 +254,30 @@ namespace CorCrypt
 
         private void SelectFile_Click(object sender, EventArgs e)
         {
-            string[] files = SelectFile();
+            File[] files = File.StringToFile_Array(SelectFile());
 
             if (!(files.Length == 0))
             {
 
-                foreach (string file in files)
+                foreach (File file in files)
                 {
-                    if (!filePathsListBox.Items.Contains(file))
+                    if (!fileList.Contains(file))
                     {
-                        filePathsListBox.Items.Add(file);
-                        RefreshStatusLabel(filePathsListBox.Items.Count);
+                        // Same file name but within different directory
+                        if (File.DuplicateFileName(files, file.fileName))
+                        {
+                            file.fileName += $" ({ file.fullFilePath })"; // TODO - Fix accessor functionality
+
+                            fileList.Add(file);
+                        }
+                        else
+                        {
+                            fileList.Add(file);
+                        }
+
+                        RefreshStatusLabel(fileList.Count);
+
+                        RefreshListBox();
                     }
                 }
             }
@@ -262,7 +293,7 @@ namespace CorCrypt
         {
             Boolean formValid = true;
 
-            if (filePathsListBox.Items.Count == 0)
+            if (fileList.Count == 0)
             {
                 string error = "Please choose at least one file.";
 
